@@ -54,6 +54,14 @@ finally:
 assert torch.allclose(ref, chk, atol=1e-5), float((ref - chk).abs().max())
 print("blend chunked == unchunked ok")
 
+# all-in-one node, Telea fallback path (no SVD models needed)
+conv = N.SBSC_Convert()
+(sbs,) = conv.convert(img, depth, 2.5, "keep_original_left", "full_sbs",
+                      True, False, True, 0.0, 42)
+assert sbs.shape == (B, H, W * 2, 3) and not torch.isnan(sbs).any()
+assert torch.allclose(sbs[:, :, :W, :], img)   # left eye = untouched original
+print("convert (all-in-one) ok, left eye exact")
+
 comb = N.SBSC_StereoCombine()
 for lay in ["full_sbs", "half_sbs", "full_tb", "half_tb", "anaglyph_rc", "cross_eye"]:
     (s,) = comb.combine(lw, rw, lay)

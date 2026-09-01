@@ -783,7 +783,82 @@ class SBSC_SimpleInpaint:
         return (torch.from_numpy(out).to(warped_image.device),)
 
 
+# ----------------------------------------------------------------------------
+# All-in-one convenience node: image + depth (+ optional SVD pipe) -> stereo.
+# Runs refine -> warp -> inpaint -> blend -> combine for both eyes internally.
+# Power users should wire the individual nodes instead (swappable inpaint,
+# per-eye control, intermediate previews).
+# ----------------------------------------------------------------------------
+class SBSC_Convert:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "depth": ("IMAGE",),
+                "disparity_percent": ("FLOAT", {"default": 2.5, "min": 0.1, "max": 10.0, "step": 0.1}),
+                "synthesis": (["keep_original_left", "keep_original_right", "both_eyes"],),
+                "layout": (["full_sbs", "half_sbs", "full_tb", "half_tb",
+                            "anaglyph_rc", "cross_eye"],),
+                # ON for per-frame depth sources (single images, DepthAnything).
+                # OFF for video depth that is already normalized over the whole
+                # clip (DA3-Streaming, Video-Depth-Anything) — renormalizing
+                # per frame would reintroduce flicker.
+                "normalize_depth": ("BOOLEAN", {"default": True}),
+                "invert_depth": ("BOOLEAN", {"default": False}),
+                "refine_depth": ("BOOLEAN", {"default": True}),
+                "temporal_sigma": ("FLOAT", {"default": 3.0, "min": 0.0, "max": 8.0, "step": 0.5}),
+                "seed": ("INT", {"default": 42, "min": 0, "max": 2**31}),
+            },
+            "optional": {
+                # connect an SVD Inpaint Loader for diffusion-quality hole
+                # filling; without it, holes are filled with classical Telea.
+                "svd_pipe": ("SBSC_SVD_PIPE",),
+                "resolution_limit": ("INT", {"default": 1024, "min": 256, "max": 1536, "step": 128}),
+                "steps": ("INT", {"default": 8, "min": 1, "max": 50}),
+                "small_hole_px": ("INT", {"default": 8, "min": 0, "max": 64}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("stereo",)
+    FUNCTION = "convert"
+    CATEGORY = "SBSCrafter"
+
+    def convert(self, image, depth, disparity_percent, synthesis, layout,
+                normalize_depth, invert_depth, refine_depth, temporal_sigma, seed,
+                svd_pipe=None, resolution_limit=1024, steps=8, small_hole_px=8):
+        d = depth
+        if refine_depth:
+            (d,) = SBSC_DepthRefine().refine(image, depth, 8, 0.0001, 2)
+        lw, lh, rw, rh, ld, rd = SBSC_DepthStereoWarp().warp(
+            image, d, 40, 0.5, synthesis, normalize_depth, invert_depth,
+            disparity_percent=disparity_percent, auto_convergence=True)
+
+        def finish_eye(warped, hole, wdepth):
+            if float(hole.sum()) == 0.0:      # untouched original eye
+                return warped
+            if svd_pipe is not None:
+                inpainted, eff = SBSC_SVDInpaint().run(
+                    svd_pipe, warped, hole, resolution_limit, 1, steps, seed,
+                    small_hole_px=small_hole_px)
+            else:
+                (inpainted,) = SBSC_SimpleInpaint().run(warped, hole, "telea", 4, 2)
+                eff = hole
+            if float(eff.sum()) == 0.0:       # every hole was a thin crack
+                return inpainted
+            (blended,) = SBSC_StereoBlend().blend(
+                warped, inpainted, eff, 24, True, temporal_sigma, True,
+                warped_depth=wdepth)
+            return blended
+
+        left = finish_eye(lw, lh, ld)
+        right = finish_eye(rw, rh, rd)
+        return SBSC_StereoCombine().combine(left, right, layout)
+
+
 NODE_CLASS_MAPPINGS = {
+    "SBSC_Convert": SBSC_Convert,
     "SBSC_DepthStereoWarp": SBSC_DepthStereoWarp,
     "SBSC_DepthRefine": SBSC_DepthRefine,
     "SBSC_SimpleInpaint": SBSC_SimpleInpaint,
@@ -793,6 +868,7 @@ NODE_CLASS_MAPPINGS = {
     "SBSC_StereoCombine": SBSC_StereoCombine,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "SBSC_Convert": "2D → 3D Stereo, all-in-one (SBSCrafter)",
     "SBSC_DepthStereoWarp": "Depth → Stereo Warp (SBSCrafter)",
     "SBSC_DepthRefine": "Depth Refine, edge-aware (SBSCrafter)",
     "SBSC_SimpleInpaint": "Simple Hole Inpaint (SBSCrafter)",

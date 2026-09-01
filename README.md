@@ -14,10 +14,19 @@ model** instead of stretch-filled, so object edges look real. A small-hole
 splitter keeps diffusion away from subject interiors (faces stay pixel-faithful),
 and everything is batch-chunked so hundreds of 1080p frames fit a 16 GB GPU.
 
+## Quick start
+
+Three nodes: `LoadImage → (any depth node) → 2D → 3D Stereo, all-in-one → SaveImage`.
+Connect an **SVD Inpaint Loader** to its `svd_pipe` input for diffusion-quality
+hole filling (recommended); without it, holes get a fast classical fill.
+The granular nodes below are for power users who want to swap the inpainting
+model, control each eye, or preview intermediates.
+
 ## Nodes
 
 | Node | Role |
 |------|------|
+| **2D → 3D Stereo, all-in-one** | image + depth (+ optional `svd_pipe`) → finished stereo. Internally: depth refine → warp (`keep_original_left`, auto-convergence) → inpaint → blend → combine. |
 | **Depth → Stereo Warp** | image + depth → left/right warped eyes, hole masks, warped depth. Softmax splatting (SoftSplat-style, depth-weighted bilinear). `keep_original_left/right` keeps one eye pixel-exact and halves inpaint cost — recommended. Resolution-independent strength via `disparity_percent`, `auto_convergence` for automatic zero-parallax. |
 | **SVD Inpaint Loader / SVD Inpaint** | StereoCrafter's Stable Video Diffusion inpainting. Spatial tiling (128 px overlap), 23-frame / 3-overlap temporal chunking with generated-tail context, single-image mode (repeat 8 + average). `small_hole_px` fills thin interior cracks sharply at full resolution and excludes them from the diffusion mask. |
 | **Stereo Blend** | composites inpainted content into the warped eye: distance feather (smoothstep), depth-adaptive radius, Reinhard-style ring color matching, temporal Gaussian smoothing of blend weights. |
