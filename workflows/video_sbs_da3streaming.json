@@ -1,0 +1,863 @@
+{
+ "last_node_id": 13,
+ "last_link_id": 19,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "VHS_LoadVideo",
+   "pos": [
+    40,
+    200
+   ],
+   "size": [
+    320,
+    300
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      1,
+      2
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "frame_count",
+     "type": "INT",
+     "links": [],
+     "slot_index": 1
+    },
+    {
+     "name": "audio",
+     "type": "AUDIO",
+     "links": [
+      3
+     ],
+     "slot_index": 2
+    },
+    {
+     "name": "video_info",
+     "type": "VHS_VIDEOINFO",
+     "links": [],
+     "slot_index": 3
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "VHS_LoadVideo"
+   },
+   "widgets_values": {
+    "video": "",
+    "force_rate": 0,
+    "custom_width": 0,
+    "custom_height": 0,
+    "frame_load_cap": 0,
+    "skip_first_frames": 0,
+    "select_every_nth": 1,
+    "choose video to upload": "image"
+   },
+   "title": "Load Video (full res + audio)"
+  },
+  {
+   "id": 2,
+   "type": "VHS_LoadVideo",
+   "pos": [
+    40,
+    560
+   ],
+   "size": [
+    320,
+    300
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      4
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "frame_count",
+     "type": "INT",
+     "links": [],
+     "slot_index": 1
+    },
+    {
+     "name": "audio",
+     "type": "AUDIO",
+     "links": [],
+     "slot_index": 2
+    },
+    {
+     "name": "video_info",
+     "type": "VHS_VIDEOINFO",
+     "links": [],
+     "slot_index": 3
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "VHS_LoadVideo"
+   },
+   "widgets_values": {
+    "video": "",
+    "force_rate": 0,
+    "custom_width": 540,
+    "custom_height": 960,
+    "frame_load_cap": 0,
+    "skip_first_frames": 0,
+    "select_every_nth": 1,
+    "choose video to upload": "image"
+   },
+   "title": "Load Video (downscaled for DA3 — SAME file, ~540px short side)"
+  },
+  {
+   "id": 3,
+   "type": "CreateVideo",
+   "pos": [
+    420,
+    620
+   ],
+   "size": [
+    220,
+    80
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 4
+    },
+    {
+     "name": "audio",
+     "type": "AUDIO",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "name": "VIDEO",
+     "type": "VIDEO",
+     "links": [
+      5
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "CreateVideo"
+   },
+   "widgets_values": [
+    30.0,
+    8
+   ],
+   "title": "Images → VIDEO"
+  },
+  {
+   "id": 4,
+   "type": "DownloadAndLoadDepthAnythingV3Model",
+   "pos": [
+    40,
+    40
+   ],
+   "size": [
+    340,
+    90
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "da3_model",
+     "type": "DA3MODEL",
+     "links": [
+      6
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "DownloadAndLoadDepthAnythingV3Model"
+   },
+   "widgets_values": [
+    "da3_large.safetensors",
+    "auto",
+    "auto"
+   ],
+   "title": "DA3 Model"
+  },
+  {
+   "id": 5,
+   "type": "DepthAnythingV3_Streaming",
+   "pos": [
+    420,
+    40
+   ],
+   "size": [
+    320,
+    400
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "da3_model",
+     "type": "DA3MODEL",
+     "link": 6
+    },
+    {
+     "name": "video",
+     "type": "VIDEO",
+     "link": 5
+    },
+    {
+     "name": "salad_model",
+     "type": "SALAD_MODEL",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "name": "depth_video",
+     "type": "VIDEO",
+     "links": [
+      7
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "npz_folder",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 1
+    },
+    {
+     "name": "pointcloud_path",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 2
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "DepthAnythingV3_Streaming"
+   },
+   "widgets_values": [
+    "V2-Style",
+    16,
+    8,
+    "torch",
+    "sim3",
+    "resize",
+    false,
+    false,
+    0.015,
+    0.75
+   ],
+   "title": "DA3 Streaming (align_lib=torch! triton JIT often broken on Windows)"
+  },
+  {
+   "id": 6,
+   "type": "GetVideoComponents",
+   "pos": [
+    790,
+    60
+   ],
+   "size": [
+    230,
+    110
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "video",
+     "type": "VIDEO",
+     "link": 7
+    }
+   ],
+   "outputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "links": [
+      8
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "audio",
+     "type": "AUDIO",
+     "links": [],
+     "slot_index": 1
+    },
+    {
+     "name": "fps",
+     "type": "FLOAT",
+     "links": [],
+     "slot_index": 2
+    },
+    {
+     "name": "bit_depth",
+     "type": "INT",
+     "links": [],
+     "slot_index": 3
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "GetVideoComponents"
+   },
+   "widgets_values": [],
+   "title": "Depth VIDEO → Images"
+  },
+  {
+   "id": 7,
+   "type": "SBSC_DepthRefine",
+   "pos": [
+    1060,
+    40
+   ],
+   "size": [
+    280,
+    130
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": 1
+    },
+    {
+     "name": "depth",
+     "type": "IMAGE",
+     "link": 8
+    }
+   ],
+   "outputs": [
+    {
+     "name": "refined_depth",
+     "type": "IMAGE",
+     "links": [
+      9
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SBSC_DepthRefine"
+   },
+   "widgets_values": [
+    8,
+    0.0001,
+    2
+   ],
+   "title": "Depth Refine (snaps 540p depth to 1080p edges)"
+  },
+  {
+   "id": 8,
+   "type": "SBSC_DepthStereoWarp",
+   "pos": [
+    1060,
+    240
+   ],
+   "size": [
+    300,
+    230
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": 2
+    },
+    {
+     "name": "depth",
+     "type": "IMAGE",
+     "link": 9
+    }
+   ],
+   "outputs": [
+    {
+     "name": "left_warped",
+     "type": "IMAGE",
+     "links": [
+      17
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "left_hole",
+     "type": "MASK",
+     "links": [],
+     "slot_index": 1
+    },
+    {
+     "name": "right_warped",
+     "type": "IMAGE",
+     "links": [
+      11,
+      13
+     ],
+     "slot_index": 2
+    },
+    {
+     "name": "right_hole",
+     "type": "MASK",
+     "links": [
+      12
+     ],
+     "slot_index": 3
+    },
+    {
+     "name": "left_wdepth",
+     "type": "IMAGE",
+     "links": [],
+     "slot_index": 4
+    },
+    {
+     "name": "right_wdepth",
+     "type": "IMAGE",
+     "links": [
+      16
+     ],
+     "slot_index": 5
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SBSC_DepthStereoWarp"
+   },
+   "widgets_values": [
+    40,
+    0.5,
+    "keep_original_left",
+    false,
+    false,
+    2.5,
+    true
+   ],
+   "title": "Warp (keep_original_left, normalize_depth=False)"
+  },
+  {
+   "id": 9,
+   "type": "SBSC_SVDInpaintLoader",
+   "pos": [
+    1060,
+    540
+   ],
+   "size": [
+    300,
+    80
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "svd_pipe",
+     "type": "SBSC_SVD_PIPE",
+     "links": [
+      10
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SBSC_SVDInpaintLoader"
+   },
+   "widgets_values": [
+    true
+   ],
+   "title": "SVD Inpaint Loader"
+  },
+  {
+   "id": 10,
+   "type": "SBSC_SVDInpaint",
+   "pos": [
+    1420,
+    240
+   ],
+   "size": [
+    280,
+    170
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "svd_pipe",
+     "type": "SBSC_SVD_PIPE",
+     "link": 10
+    },
+    {
+     "name": "warped_image",
+     "type": "IMAGE",
+     "link": 11
+    },
+    {
+     "name": "hole_mask",
+     "type": "MASK",
+     "link": 12
+    }
+   ],
+   "outputs": [
+    {
+     "name": "inpainted",
+     "type": "IMAGE",
+     "links": [
+      14
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "effective_mask",
+     "type": "MASK",
+     "links": [
+      15
+     ],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SBSC_SVDInpaint"
+   },
+   "widgets_values": [
+    768,
+    1,
+    8,
+    42,
+    8
+   ],
+   "title": "SVD Inpaint (right eye only)"
+  },
+  {
+   "id": 11,
+   "type": "SBSC_StereoBlend",
+   "pos": [
+    1740,
+    240
+   ],
+   "size": [
+    280,
+    220
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "warped_image",
+     "type": "IMAGE",
+     "link": 13
+    },
+    {
+     "name": "inpainted_image",
+     "type": "IMAGE",
+     "link": 14
+    },
+    {
+     "name": "hole_mask",
+     "type": "MASK",
+     "link": 15
+    },
+    {
+     "name": "warped_depth",
+     "type": "IMAGE",
+     "link": 16
+    }
+   ],
+   "outputs": [
+    {
+     "name": "blended",
+     "type": "IMAGE",
+     "links": [
+      18
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SBSC_StereoBlend"
+   },
+   "widgets_values": [
+    24,
+    true,
+    3.0,
+    true
+   ],
+   "title": "Stereo Blend (temporal σ=3)"
+  },
+  {
+   "id": 12,
+   "type": "SBSC_StereoCombine",
+   "pos": [
+    2060,
+    260
+   ],
+   "size": [
+    240,
+    90
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "left",
+     "type": "IMAGE",
+     "link": 17
+    },
+    {
+     "name": "right",
+     "type": "IMAGE",
+     "link": 18
+    }
+   ],
+   "outputs": [
+    {
+     "name": "stereo",
+     "type": "IMAGE",
+     "links": [
+      19
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SBSC_StereoCombine"
+   },
+   "widgets_values": [
+    "full_sbs"
+   ],
+   "title": "Stereo Combine"
+  },
+  {
+   "id": 13,
+   "type": "VHS_VideoCombine",
+   "pos": [
+    2340,
+    200
+   ],
+   "size": [
+    340,
+    300
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 19
+    },
+    {
+     "name": "audio",
+     "type": "AUDIO",
+     "link": 3
+    }
+   ],
+   "outputs": [
+    {
+     "name": "Filenames",
+     "type": "VHS_FILENAMES",
+     "links": [],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "VHS_VideoCombine"
+   },
+   "widgets_values": {
+    "frame_rate": 30,
+    "loop_count": 0,
+    "filename_prefix": "SBSCrafter_video",
+    "format": "video/h264-mp4",
+    "pingpong": false,
+    "save_output": true
+   },
+   "title": "Save SBS Video (set frame_rate = source!)"
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   7,
+   0,
+   "IMAGE"
+  ],
+  [
+   2,
+   1,
+   0,
+   8,
+   0,
+   "IMAGE"
+  ],
+  [
+   3,
+   1,
+   2,
+   13,
+   1,
+   "AUDIO"
+  ],
+  [
+   4,
+   2,
+   0,
+   3,
+   0,
+   "IMAGE"
+  ],
+  [
+   5,
+   3,
+   0,
+   5,
+   1,
+   "VIDEO"
+  ],
+  [
+   6,
+   4,
+   0,
+   5,
+   0,
+   "DA3MODEL"
+  ],
+  [
+   7,
+   5,
+   0,
+   6,
+   0,
+   "VIDEO"
+  ],
+  [
+   8,
+   6,
+   0,
+   7,
+   1,
+   "IMAGE"
+  ],
+  [
+   9,
+   7,
+   0,
+   8,
+   1,
+   "IMAGE"
+  ],
+  [
+   10,
+   9,
+   0,
+   10,
+   0,
+   "SBSC_SVD_PIPE"
+  ],
+  [
+   11,
+   8,
+   2,
+   10,
+   1,
+   "IMAGE"
+  ],
+  [
+   12,
+   8,
+   3,
+   10,
+   2,
+   "MASK"
+  ],
+  [
+   13,
+   8,
+   2,
+   11,
+   0,
+   "IMAGE"
+  ],
+  [
+   14,
+   10,
+   0,
+   11,
+   1,
+   "IMAGE"
+  ],
+  [
+   15,
+   10,
+   1,
+   11,
+   2,
+   "MASK"
+  ],
+  [
+   16,
+   8,
+   5,
+   11,
+   3,
+   "IMAGE"
+  ],
+  [
+   17,
+   8,
+   0,
+   12,
+   0,
+   "IMAGE"
+  ],
+  [
+   18,
+   11,
+   0,
+   12,
+   1,
+   "IMAGE"
+  ],
+  [
+   19,
+   12,
+   0,
+   13,
+   0,
+   "IMAGE"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}
