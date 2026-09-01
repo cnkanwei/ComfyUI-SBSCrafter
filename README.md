@@ -66,16 +66,21 @@ vertical p95 < 1 px, foreground pop-out 1.5–3 % of eye width.
 - Image 2560 px: ~10 s/eye (only one eye needs inpainting with `keep_original_*`)
 - Video 1080×1920: ~2.3 s/frame end-to-end including DA3-Streaming depth
 
-## Licenses
+## License — noncommercial
 
-- Original code in this repository: **MIT** (see `LICENSE`).
+- Original code in this repository:
+  **[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/)**
+  (see `LICENSE`) — use, modify and share freely for any noncommercial purpose;
+  commercial use is not permitted.
 - `svd_pipeline.py` is derived from
   [TencentARC/StereoCrafter](https://github.com/TencentARC/StereoCrafter)
   (Copyright (C) 2024 THL A29 Limited) under the StereoCrafter license
   (`third_party/StereoCrafter-LICENSE.txt`): **academic, research and education
-  use only — no commercial use**. The StereoCrafter UNet and SVD weights carry
-  their own licenses (Tencent / Stability AI). **Consequently the SVD inpainting
-  path of this pack must not be used commercially.**
+  use only**. The StereoCrafter UNet and SVD weights carry their own licenses
+  (Tencent / Stability AI).
+
+In short: this project is free for personal, research and educational use, and
+**not for commercial use** in any part.
 
 ## Credits
 
