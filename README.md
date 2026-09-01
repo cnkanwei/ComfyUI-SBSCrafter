@@ -31,6 +31,7 @@ model, control each eye, or preview intermediates.
 | **SVD Inpaint Loader / SVD Inpaint** | StereoCrafter's Stable Video Diffusion inpainting. Spatial tiling (128 px overlap), 23-frame / 3-overlap temporal chunking with generated-tail context, single-image mode (repeat 8 + average). `small_hole_px` fills thin interior cracks sharply at full resolution and excludes them from the diffusion mask. |
 | **Stereo Blend** | composites inpainted content into the warped eye: distance feather (smoothstep), depth-adaptive radius, Reinhard-style ring color matching, temporal Gaussian smoothing of blend weights. |
 | **Depth Refine** | guided filter (He et al.) that snaps depth edges to image edges — removes edge halos/ghosting before warping. |
+| **Particle Depth Fix** | optional preprocessing for snow / rain / dust: top-hat detection of small isolated blobs, whose unreliable near-depth (depth models paint each flake as a large near blob) is replaced with the local depth lower envelope so particles ride with the background instead of tearing. Wire a segmentation mask into `protect_mask` for subjects with particle-like texture. |
 | **Simple Hole Inpaint** | classical OpenCV Telea/NS fill, a fast zero-dependency fallback. |
 | **Stereo Combine** | full/half SBS, full/half TB, cross-eye, red-cyan anaglyph. |
 

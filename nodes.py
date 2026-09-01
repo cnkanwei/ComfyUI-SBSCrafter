@@ -884,8 +884,110 @@ class SBSC_Convert:
         return SBSC_StereoCombine().combine(left, right, layout)
 
 
+# ----------------------------------------------------------------------------
+# Particle depth fix: snow / rain / dust are tiny semi-transparent blobs whose
+# estimated depth is unreliable (often pinned to the foreground), so forward
+# warping tears them apart. Detect them with a morphological top-hat on
+# luminance and replace their DEPTH with the local large-area median, so the
+# particles ride coherently with whatever is behind them.
+# ----------------------------------------------------------------------------
+class SBSC_ParticleDepthFix:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "depth": ("IMAGE",),
+                # largest particle diameter to catch, in px of the IMAGE
+                "particle_size_px": ("INT", {"default": 5, "min": 1, "max": 31}),
+                # luminance contrast a blob needs against its surroundings
+                "threshold": ("FLOAT", {"default": 0.10, "min": 0.01, "max": 0.5, "step": 0.01}),
+                "detect": (["bright", "dark", "both"],),
+            },
+            "optional": {
+                # particles and particle-LIKE subject texture (speckled plumage,
+                # sequins, bokeh dots) are indistinguishable in a single frame.
+                # Feed a subject mask (e.g. from a SAM / segmentation node) to
+                # protect those regions from depth replacement. Particles over
+                # the subject don't tear anyway — tearing happens over the far
+                # background, which stays covered.
+                "protect_mask": ("MASK",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("fixed_depth", "particle_mask")
+    FUNCTION = "fix"
+    CATEGORY = "SBSCrafter"
+
+    def fix(self, image, depth, particle_size_px, threshold, detect, protect_mask=None):
+        if not _HAS_CV2:
+            raise RuntimeError("SBSC_ParticleDepthFix needs opencv (cv2).")
+        out_dev = depth.device
+        img = image.detach().cpu().numpy()
+        d_in = depth_to_b1hw(depth, normalize=False).cpu().numpy()[:, 0]  # (B,h,w)
+        B, H, W = img.shape[0], img.shape[1], img.shape[2]
+
+        k = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * particle_size_px + 1, 2 * particle_size_px + 1))
+        # depth models paint each particle as a large near-depth blob (often
+        # 40px+ across for a 5px flake), so local medians stay poisoned. Use the
+        # LOWER ENVELOPE instead: a big min-filter suppresses every near-blob,
+        # leaving the depth of whatever is behind; then smooth it.
+        bg_k = (max(31, min(H, W) // 6)) | 1
+
+        fixed = []
+        masks = []
+        for b in range(B):
+            lum = (0.299 * img[b, ..., 0] + 0.587 * img[b, ..., 1]
+                   + 0.114 * img[b, ..., 2]).astype(np.float32)
+            hits = np.zeros((H, W), bool)
+            if detect in ("bright", "both"):
+                tophat = lum - cv2.morphologyEx(lum, cv2.MORPH_OPEN, k)
+                hits |= tophat > threshold
+            if detect in ("dark", "both"):
+                blackhat = cv2.morphologyEx(lum, cv2.MORPH_CLOSE, k) - lum
+                hits |= blackhat > threshold
+
+            # reject subject texture (feather/fabric highlights also trip the
+            # top-hat): real airborne particles are SMALL and ISOLATED.
+            if hits.any():
+                # (a) component size: nothing bigger than a few particle areas
+                n, lbl, stats, _ = cv2.connectedComponentsWithStats(
+                    hits.astype(np.uint8), connectivity=8)
+                max_area = 4 * particle_size_px * particle_size_px
+                keep = np.zeros(n, bool)
+                keep[1:] = stats[1:, cv2.CC_STAT_AREA] <= max_area
+                hits = keep[lbl]
+                # (b) local density: texture detections come in dense clusters
+                dens_k = 8 * particle_size_px + 1
+                dens = cv2.blur(hits.astype(np.float32), (dens_k, dens_k))
+                hits &= dens < 0.15
+
+            if protect_mask is not None:
+                pmk = mask_to_b1hw(protect_mask).cpu().numpy()[min(b, protect_mask.shape[0] - 1), 0]
+                if pmk.shape != (H, W):
+                    pmk = cv2.resize(pmk, (W, H), interpolation=cv2.INTER_NEAREST)
+                hits &= pmk <= 0.5
+
+            db = d_in[b]
+            if db.shape != (H, W):
+                db = cv2.resize(db, (W, H), interpolation=cv2.INTER_LINEAR)
+            if hits.any():
+                bg = cv2.erode(db, np.ones((bg_k, bg_k), np.float32))
+                bg = cv2.blur(bg, (bg_k // 2, bg_k // 2))
+                db = np.where(hits, bg, db)
+            fixed.append(db)
+            masks.append(hits.astype(np.float32))
+
+        d_out = torch.from_numpy(np.stack(fixed)).unsqueeze(-1).repeat(1, 1, 1, 3)
+        m_out = torch.from_numpy(np.stack(masks))
+        return (d_out.to(out_dev), m_out.to(out_dev))
+
+
 NODE_CLASS_MAPPINGS = {
     "SBSC_Convert": SBSC_Convert,
+    "SBSC_ParticleDepthFix": SBSC_ParticleDepthFix,
     "SBSC_DepthStereoWarp": SBSC_DepthStereoWarp,
     "SBSC_DepthRefine": SBSC_DepthRefine,
     "SBSC_SimpleInpaint": SBSC_SimpleInpaint,
@@ -896,6 +998,7 @@ NODE_CLASS_MAPPINGS = {
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "SBSC_Convert": "2D → 3D Stereo, all-in-one (SBSCrafter)",
+    "SBSC_ParticleDepthFix": "Particle Depth Fix, snow/rain (SBSCrafter)",
     "SBSC_DepthStereoWarp": "Depth → Stereo Warp (SBSCrafter)",
     "SBSC_DepthRefine": "Depth Refine, edge-aware (SBSCrafter)",
     "SBSC_SimpleInpaint": "Simple Hole Inpaint (SBSCrafter)",

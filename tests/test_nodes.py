@@ -62,6 +62,22 @@ assert sbs.shape == (B, H, W * 2, 3) and not torch.isnan(sbs).any()
 assert torch.allclose(sbs[:, :, :W, :], img)   # left eye = untouched original
 print("convert (all-in-one) ok, left eye exact")
 
+# particle depth fix: bright dots over a far background get background depth
+pimg = torch.full((1, 128, 160, 3), 0.3)
+pd = torch.full((1, 128, 160, 3), 0.2)
+for (y, x) in [(20, 30), (60, 100), (100, 50)]:
+    pimg[0, y:y+3, x:x+3, :] = 1.0     # bright 3px flakes
+    pd[0, y-6:y+9, x-6:x+9, :] = 0.9   # depth model paints a big near blob
+pfx = N.SBSC_ParticleDepthFix()
+fixed, pmask = pfx.fix(pimg, pd, 4, 0.2, "bright")
+assert pmask.sum() > 0, "no particles detected"
+sel = pmask[0] > 0.5
+assert float(fixed[0, ..., 0][sel].mean()) < 0.4, "particle depth not pushed to background"
+protect = torch.ones(1, 128, 160)      # protect everything -> nothing changes
+fixed2, pmask2 = pfx.fix(pimg, pd, 4, 0.2, "bright", protect_mask=protect)
+assert float(pmask2.sum()) == 0 and torch.allclose(fixed2[..., 0], pd[..., 0])
+print("particle depth fix ok (detection, bg push, protect_mask)")
+
 comb = N.SBSC_StereoCombine()
 for lay in ["full_sbs", "half_sbs", "full_tb", "half_tb", "anaglyph_rc", "cross_eye"]:
     (s,) = comb.combine(lw, rw, lay)
