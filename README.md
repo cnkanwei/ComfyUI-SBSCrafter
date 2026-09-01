@@ -51,6 +51,15 @@ model, control each eye, or preview intermediates.
 
 ## Workflows (`workflows/`)
 
+Simple (all-in-one node — start here):
+
+- `image_sbs_simple.json` — LoadImage → DA3 depth → **all-in-one** → Save.
+- `video_sbs_simple.json` — same idea for video with DA3-Streaming depth,
+  audio carried through (`normalize_depth` OFF — the depth is already
+  normalized over the whole clip).
+
+Advanced (granular nodes — swappable inpaint, per-eye control, previews):
+
 - `image_sbs.json` — LoadImage → DA3 depth → Depth Refine → Warp
   (`keep_original_left`) → SVD Inpaint → Blend → Combine → Save.
 - `video_sbs_da3streaming.json` — video path with DA3-Streaming depth
