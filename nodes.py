@@ -82,7 +82,7 @@ def _chunk_ranges(total, chunk):
 # forward warp via softmax splatting  (bilinear + depth-weighted occlusion,
 # softmax splatting (SoftSplat, Niklaus & Liu 2020))
 # ----------------------------------------------------------------------------
-def warp_one_eye(img_bchw, depth_b1hw, shift_x, imp_temp=8.0):
+def warp_one_eye(img_bchw, depth_b1hw, shift_x, imp_temp=8.0, cover_thresh=0.35):
     """
     Horizontal forward-warp of image + depth by a per-pixel shift.
 
@@ -115,15 +115,30 @@ def warp_one_eye(img_bchw, depth_b1hw, shift_x, imp_temp=8.0):
     numer = torch.zeros(B, C, H, W, device=dev, dtype=img_bchw.dtype)
     denom = torch.zeros(B, 1, H, W, device=dev, dtype=img_bchw.dtype)
     dnum = torch.zeros(B, 1, H, W, device=dev, dtype=img_bchw.dtype)
+    cover = torch.zeros(B, 1, H, W, device=dev, dtype=img_bchw.dtype)
     numer.scatter_add_(3, x0c.expand(B, C, H, W), img_bchw * cw0.expand(B, C, H, W))
     numer.scatter_add_(3, x1c.expand(B, C, H, W), img_bchw * cw1.expand(B, C, H, W))
     denom.scatter_add_(3, x0c, cw0)
     denom.scatter_add_(3, x1c, cw1)
     dnum.scatter_add_(3, x0c, depth_b1hw * cw0)
     dnum.scatter_add_(3, x1c, depth_b1hw * cw1)
+    # plain bilinear coverage, WITHOUT the depth importance weighting: how much
+    # source area actually landed on each destination pixel. A fully covered
+    # surface sums to ~1; disocclusions to 0; stray wisps (single anti-aliased
+    # hair/fur pixels splatting into a revealed region) to a small fraction.
+    cover.scatter_add_(3, x0c, w0 * v0)
+    cover.scatter_add_(3, x1c, w1 * v1)
 
     eps = 1e-6
-    hole = (denom < eps).float()
+    # under-covered pixels are treated as holes too, so sparse edge-wisp splats
+    # (dark speckles over the disocclusion band) get inpainted instead of kept.
+    hole = ((denom < eps) | (cover < cover_thresh)).float()
+    # absorb the speckled lace: hair/fur wisps splat interleaved with true holes,
+    # leaving dark flecks between hole pixels. A pixel sitting in a mostly-hole
+    # neighborhood without solid coverage joins the hole so the whole band gets
+    # inpainted as one clean region. Solid surfaces (cover ~1) are never touched.
+    neigh = F.avg_pool2d(hole, 5, stride=1, padding=2)
+    hole = torch.clamp(hole + ((neigh > 0.35) & (cover < 0.9)).float(), 0.0, 1.0)
     warped_img = numer / (denom + eps)
     warped_depth = dnum / (denom + eps)
     return warped_img, hole, warped_depth
@@ -152,6 +167,11 @@ class SBSC_DepthStereoWarp:
                 # If on, convergence is set per image to the median scene depth
                 # (mid-scene sits on screen; nearer pops out, farther recedes).
                 "auto_convergence": ("BOOLEAN", {"default": False}),
+                # Grow the near-depth silhouette by this many px (max filter) before
+                # warping. Anti-aliased edge pixels (hair, fur, thin rims) whose
+                # depth reads as background then travel WITH the foreground instead
+                # of staying behind as dark speckles in the disocclusion band.
+                "foreground_dilate_px": ("INT", {"default": 2, "min": 0, "max": 16}),
             }
         }
 
@@ -163,7 +183,7 @@ class SBSC_DepthStereoWarp:
 
     def warp(self, image, depth, max_disparity_px, convergence, synthesis,
              normalize_depth, invert_depth, disparity_percent=0.0,
-             auto_convergence=False):
+             auto_convergence=False, foreground_dilate_px=2):
         out_dev = image.device
         dev = _device_of(image)
         img_all = img_to_bchw(image)                       # stays on out_dev (CPU)
@@ -173,6 +193,9 @@ class SBSC_DepthStereoWarp:
         # match depth to image resolution
         if d_all.shape[-2:] != img_all.shape[-2:]:
             d_all = F.interpolate(d_all, size=img_all.shape[-2:], mode="nearest")
+        if foreground_dilate_px and foreground_dilate_px > 0:
+            r = int(foreground_dilate_px)
+            d_all = F.max_pool2d(d_all, kernel_size=2 * r + 1, stride=1, padding=r)
 
         if disparity_percent and disparity_percent > 0:
             disp = float(img_all.shape[3]) * disparity_percent / 100.0
@@ -639,6 +662,11 @@ class SBSC_SVDInpaint:
         mask = mask_to_b1hw(hole_mask).float()              # (f,1,H,W)
         f, c, H, W = frames.shape
 
+        # every input hole gets filled by SOMETHING (Telea base or SVD), so the
+        # blend must feather around all of them — otherwise the raw warped
+        # frame's unfilled hole pixels leak through where the blend weight is 0.
+        eff_mask = mask[:, 0].clone()
+
         # --- split holes: thin interior cracks vs wide disocclusion bands ---
         if small_hole_px > 0 and _HAS_CV2:
             k = cv2.getStructuringElement(
@@ -658,7 +686,6 @@ class SBSC_SVDInpaint:
             frames = torch.from_numpy(frames_np)
             mask = torch.from_numpy(wide_np).unsqueeze(1)   # SVD sees wide bands only
 
-        eff_mask = mask[:, 0].clone()                       # what the blend should treat as holes
         if float(mask.sum()) == 0:
             # no wide disocclusion bands at all — the sharp full-res fill is final
             return (bchw_to_img(frames.clamp(0.0, 1.0)).to(out_dev), eff_mask.to(out_dev))
